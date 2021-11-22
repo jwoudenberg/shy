@@ -65,7 +65,7 @@ fakeBinaries = ["cp", "rm", "mv"]
 
 runFakeBin :: [String] -> IO ()
 runFakeBin args = do
-  putStr "+"
+  putStr "+ "
   for_ (Data.List.intersperse " " args) putStr
   putStr "\n"
 

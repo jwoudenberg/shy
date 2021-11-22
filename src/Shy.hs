@@ -4,6 +4,7 @@ import qualified Brick
 import qualified Brick.BChan
 import qualified Brick.Widgets.Edit as Edit
 import qualified Control.Concurrent.Async as Async
+import qualified Control.Exception
 import Control.Monad.IO.Class (liftIO)
 import Data.Function ((&))
 import qualified Data.IORef
@@ -11,10 +12,12 @@ import qualified Data.Maybe
 import qualified Data.Text as Text
 import qualified Data.Text.IO
 import qualified Data.Text.Lazy
+import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Lazy.Encoding
 import qualified Graphics.Vty as Vty
 import qualified Graphics.Vty.Input.Events as VtyEvents
 import qualified System.Exit
+import qualified System.IO.Error
 import qualified System.Posix.Types
 import qualified System.Process.Typed as Process
 
@@ -28,11 +31,11 @@ main = do
 
 data State = State
   { editor :: Edit.Editor Text.Text Name,
-    cmdProcess :: Maybe (Async.Async (), Data.IORef.IORef Text.Text),
+    cmdProcess :: Maybe (Async.Async (), Data.IORef.IORef Builder.Builder),
     output :: Text.Text
   }
 
-data Event = CmdProcessFinished
+data Event = ProcessProducedNewOutput
 
 data Name = Editor
   deriving (Eq, Ord, Show)
@@ -86,12 +89,17 @@ appHandleEvent chan state event =
                 cmdProcess = Just (newCmdProcess, newRef),
                 output = ""
               }
-    Brick.AppEvent CmdProcessFinished -> do
+    Brick.AppEvent ProcessProducedNewOutput -> do
       newOutput <-
         case cmdProcess state of
           Nothing -> pure ""
           Just (_, ref) -> liftIO (Data.IORef.readIORef ref)
-      Brick.continue state {output = newOutput}
+      Brick.continue
+        state
+          { output =
+              Builder.toLazyText newOutput
+                & Data.Text.Lazy.toStrict
+          }
     Brick.MouseDown _ _ _ _ -> Brick.continue state
     Brick.MouseUp _ _ _ -> Brick.continue state
 
@@ -112,20 +120,37 @@ appDraw state =
 appChooseCursor :: State -> [Brick.CursorLocation Name] -> Maybe (Brick.CursorLocation Name)
 appChooseCursor _ = Data.Maybe.listToMaybe
 
-runCommand :: Brick.BChan.BChan Event -> Data.IORef.IORef Text.Text -> Text.Text -> IO ()
-runCommand chan ref cmd = do
-  (exitCode, output) <-
-    Process.proc "bash" []
-      & Process.setStdin (Process.byteStringInput (Data.Text.Lazy.Encoding.encodeUtf8 (Data.Text.Lazy.fromStrict cmd)))
-      & Process.readProcessInterleaved
-  let textOutput =
-        case Data.Text.Lazy.Encoding.decodeUtf8' output of
-          Left _ -> "[non-utf8 content]"
-          Right txt -> Data.Text.Lazy.toStrict txt
-  let fullOutput =
+runCommand :: Brick.BChan.BChan Event -> Data.IORef.IORef Builder.Builder -> Text.Text -> IO ()
+runCommand chan ref cmd =
+  let stdin =
+        Data.Text.Lazy.fromStrict cmd
+          & Data.Text.Lazy.Encoding.encodeUtf8
+          & Process.byteStringInput
+      config =
+        Process.proc "bash" []
+          & Process.setStdin stdin
+          & Process.setStdout Process.createPipe
+          & Process.setStderr Process.createPipe
+      writeLine line = do
+        Data.IORef.atomicModifyIORef ref (\acc -> (acc <> line <> "\n", ()))
+        _ <- Brick.BChan.writeBChanNonBlocking chan ProcessProducedNewOutput
+        pure ()
+      fromHandleToRef handle = do
+        maybeStr <- Control.Exception.try $ Data.Text.IO.hGetLine handle
+        case maybeStr of
+          Left err ->
+            if System.IO.Error.isEOFError err
+              then pure ()
+              else Control.Exception.throwIO err
+          Right str -> do
+            writeLine (Builder.fromText str)
+            fromHandleToRef handle
+   in Process.withProcessWait config $ \proc -> do
+        Async.concurrently_
+          (fromHandleToRef (Process.getStdout proc))
+          (fromHandleToRef (Process.getStderr proc))
+        exitCode <- Process.waitExitCode proc
         case exitCode of
-          System.Exit.ExitSuccess -> textOutput
-          System.Exit.ExitFailure code -> (textOutput <> "\n[failed with code: " <> Text.pack (show code) <> "]")
-  Data.IORef.writeIORef ref fullOutput
-  _ <- Brick.BChan.writeBChanNonBlocking chan CmdProcessFinished
-  pure ()
+          System.Exit.ExitSuccess -> pure ()
+          System.Exit.ExitFailure code ->
+            writeLine ("\n[failed with code: " <> Builder.fromString (show code) <> "]")

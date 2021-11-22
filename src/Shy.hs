@@ -6,11 +6,14 @@ import Control.Monad.IO.Class (liftIO)
 import qualified Data.Text as Text
 import qualified Data.Text.IO
 import qualified Data.Void as Void
+import qualified Graphics.Vty as Vty
 import qualified Graphics.Vty.Input.Events as VtyEvents
+import qualified System.Posix.Types
 
 main :: IO ()
 main = do
-  endState <- Brick.defaultMain app initialState
+  initialVty <- mkVty
+  endState <- Brick.customMain initialVty mkVty Nothing app initialState
   let finalCmd = Text.intercalate "\n" (Edit.getEditContents (editor endState))
   liftIO $ Data.Text.IO.putStrLn finalCmd
 
@@ -22,6 +25,12 @@ type Event = Void.Void
 
 data Name = Editor
   deriving (Eq, Ord, Show)
+
+mkVty :: IO Vty.Vty
+mkVty = Vty.mkVty Vty.defaultConfig {Vty.outputFd = Just stdError}
+
+stdError :: System.Posix.Types.Fd
+stdError = System.Posix.Types.Fd 2
 
 app :: Brick.App State Event Name
 app = (Brick.simpleApp (Brick.txt "")) {Brick.appDraw, Brick.appHandleEvent}

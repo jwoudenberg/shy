@@ -65,10 +65,13 @@ appHandleEvent state event =
 
 appDraw :: State -> [Brick.Widget Name]
 appDraw state =
-  [ Edit.renderEditor
-      (Brick.txt . Text.intercalate "\n")
-      True
-      (editor state),
+  [ Brick.hBox
+      [ Brick.txt "> ",
+        Edit.renderEditor
+          (Brick.txt . Text.intercalate "\n")
+          True
+          (editor state)
+      ],
     Brick.txtWrap (output state)
   ]
 

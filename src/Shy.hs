@@ -12,6 +12,7 @@ import qualified Data.Text.Lazy.Encoding
 import qualified Data.Void as Void
 import qualified Graphics.Vty as Vty
 import qualified Graphics.Vty.Input.Events as VtyEvents
+import qualified System.Exit
 import qualified System.Posix.Types
 import qualified System.Process.Typed as Process
 
@@ -81,11 +82,14 @@ appChooseCursor _ = Data.Maybe.listToMaybe
 
 runCommand :: Text.Text -> IO Text.Text
 runCommand cmd = do
-  (_, output) <-
+  (exitCode, output) <-
     Process.proc "bash" []
       & Process.setStdin (Process.byteStringInput (Data.Text.Lazy.Encoding.encodeUtf8 (Data.Text.Lazy.fromStrict cmd)))
       & Process.readProcessInterleaved
-  Data.Text.Lazy.Encoding.decodeUtf8' output
-    & either (\_ -> "") id
-    & Data.Text.Lazy.toStrict
-    & pure
+  let textOutput =
+        Data.Text.Lazy.Encoding.decodeUtf8' output
+          & either (\_ -> "") id
+          & Data.Text.Lazy.toStrict
+  case exitCode of
+    System.Exit.ExitSuccess -> pure textOutput
+    System.Exit.ExitFailure code -> pure (textOutput <> "\n[failed with code: " <> Text.pack (show code) <> "]")

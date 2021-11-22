@@ -73,12 +73,11 @@ runFakeBin args = do
 
 run :: IO ()
 run = do
-  dir <- fakeBinariesDir
-  setupFakeBinaries dir
+  setupFakeBinaries
   initialVty <- mkVty
   chan <- Brick.BChan.newBChan 1
   shell <- Data.Maybe.fromMaybe Bash <$> detectShell
-  endState <- Brick.customMain initialVty mkVty (Just chan) app (initialState chan dir shell)
+  endState <- Brick.customMain initialVty mkVty (Just chan) app (initialState chan shell)
   let finalCmd = Text.concat (Edit.getEditContents (editor endState))
   liftIO $ Data.Text.IO.putStrLn finalCmd
 
@@ -86,7 +85,6 @@ data State = State
   { editor :: Edit.Editor Text.Text Name,
     cmdProcess :: Maybe (Async.Async (), Data.IORef.IORef Builder.Builder),
     eventChannel :: Brick.BChan.BChan Event,
-    extraPathDir :: FilePath,
     shellToUse :: Shell,
     output :: Text.Text
   }
@@ -110,13 +108,12 @@ app =
       Brick.appChooseCursor
     }
 
-initialState :: Brick.BChan.BChan Event -> FilePath -> Shell -> State
-initialState eventChannel extraPathDir shellToUse =
+initialState :: Brick.BChan.BChan Event -> Shell -> State
+initialState eventChannel shellToUse =
   State
     { editor = Edit.editor Editor (Just 1) "",
       cmdProcess = Nothing,
       eventChannel,
-      extraPathDir,
       shellToUse,
       output = ""
     }
@@ -142,7 +139,6 @@ appHandleEvent state event =
                 Just (async, _) -> Async.cancel async
               runCommand
                 (eventChannel state)
-                (extraPathDir state)
                 (shellToUse state)
                 newRef
                 (Text.concat (Edit.getEditContents newEditor))
@@ -187,16 +183,15 @@ appChooseCursor _ = Data.Maybe.listToMaybe
 
 runCommand ::
   Brick.BChan.BChan Event ->
-  FilePath ->
   Shell ->
   Data.IORef.IORef Builder.Builder ->
   Text.Text ->
   IO ()
-runCommand chan extraPathDir shell ref cmd =
+runCommand chan shell ref cmd =
   let stdin =
-        Process.byteStringInput . Data.Text.Lazy.Encoding.encodeUtf8 $
-          "export PATH=" <> Data.Text.Lazy.pack extraPathDir <> ":$PATH;"
-            <> Data.Text.Lazy.fromStrict cmd
+        Data.Text.Lazy.fromStrict cmd
+          & Data.Text.Lazy.Encoding.encodeUtf8
+          & Process.byteStringInput
       config =
         Process.proc (shellToString shell) []
           & Process.setStdin stdin
@@ -216,22 +211,24 @@ runCommand chan extraPathDir shell ref cmd =
           Right str -> do
             writeLine (Builder.fromText str)
             fromHandleToRef handle
-   in Process.withProcessWait config $ \proc -> do
-        Async.concurrently_
-          (fromHandleToRef (Process.getStdout proc))
-          (fromHandleToRef (Process.getStderr proc))
-        exitCode <- Process.waitExitCode proc
-        case exitCode of
-          System.Exit.ExitSuccess -> pure ()
-          System.Exit.ExitFailure code ->
-            writeLine ("\n[failed with code: " <> Builder.fromString (show code) <> "]")
+   in do
+        Process.withProcessWait config $ \proc -> do
+          Async.concurrently_
+            (fromHandleToRef (Process.getStdout proc))
+            (fromHandleToRef (Process.getStderr proc))
+          exitCode <- Process.waitExitCode proc
+          case exitCode of
+            System.Exit.ExitSuccess -> pure ()
+            System.Exit.ExitFailure code ->
+              writeLine ("\n[failed with code: " <> Builder.fromString (show code) <> "]")
 
-setupFakeBinaries :: FilePath -> IO ()
-setupFakeBinaries dir = do
-  Directory.createDirectoryIfMissing True dir
+setupFakeBinaries :: IO ()
+setupFakeBinaries = do
+  fakeBinariesDir <- Directory.getXdgDirectory Directory.XdgCache "shy"
+  Directory.createDirectoryIfMissing True fakeBinariesDir
   self <- System.Environment.getExecutablePath
   for_ fakeBinaries $ \fakeBin -> do
-    let path = dir </> fakeBin
+    let path = fakeBinariesDir </> fakeBin
     Control.Exception.catch
       (Directory.removeFile path)
       ( \err ->
@@ -240,9 +237,8 @@ setupFakeBinaries dir = do
             else Control.Exception.throwIO err
       )
     Directory.createFileLink self path
-
-fakeBinariesDir :: IO FilePath
-fakeBinariesDir = Directory.getXdgDirectory Directory.XdgCache "shy"
+  path <- System.Environment.getEnv "PATH"
+  System.Environment.setEnv "PATH" (fakeBinariesDir <> ":" <> path)
 
 data Shell = Bash | Fish | Zsh
 

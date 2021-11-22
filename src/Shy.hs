@@ -73,11 +73,12 @@ runFakeBin args = do
 
 run :: IO ()
 run = do
-  setupFakeBinaries
+  -- To run commands later we'll need to do some setup. Run it asynchronously
+  -- so the user can start typing immediately.
+  setup <- Async.async setupForRunningCommands
   initialVty <- mkVty
   chan <- Brick.BChan.newBChan 1
-  shell <- Data.Maybe.fromMaybe Bash <$> detectShell
-  endState <- Brick.customMain initialVty mkVty (Just chan) app (initialState chan shell)
+  endState <- Brick.customMain initialVty mkVty (Just chan) app (initialState chan setup)
   let finalCmd = Text.concat (Edit.getEditContents (editor endState))
   liftIO $ Data.Text.IO.putStrLn finalCmd
 
@@ -85,7 +86,7 @@ data State = State
   { editor :: Edit.Editor Text.Text Name,
     cmdProcess :: Maybe (Async.Async (), Data.IORef.IORef Builder.Builder),
     eventChannel :: Brick.BChan.BChan Event,
-    shellToUse :: Shell,
+    asyncSetupForRunningCommands :: Async.Async Shell,
     output :: Text.Text
   }
 
@@ -108,13 +109,13 @@ app =
       Brick.appChooseCursor
     }
 
-initialState :: Brick.BChan.BChan Event -> Shell -> State
-initialState eventChannel shellToUse =
+initialState :: Brick.BChan.BChan Event -> Async.Async Shell -> State
+initialState eventChannel asyncSetupForRunningCommands =
   State
     { editor = Edit.editor Editor (Just 1) "",
       cmdProcess = Nothing,
       eventChannel,
-      shellToUse,
+      asyncSetupForRunningCommands,
       output = ""
     }
 
@@ -139,7 +140,7 @@ appHandleEvent state event =
                 Just (async, _) -> Async.cancel async
               runCommand
                 (eventChannel state)
-                (shellToUse state)
+                (asyncSetupForRunningCommands state)
                 newRef
                 (Text.concat (Edit.getEditContents newEditor))
           Brick.continue
@@ -167,8 +168,7 @@ appDraw :: State -> [Brick.Widget Name]
 appDraw state =
   [ Brick.vBox
       [ Brick.hBox
-          [ Brick.str (shellToString (shellToUse state)),
-            Brick.txt "> ",
+          [ Brick.txt "> ",
             Edit.renderEditor
               (Brick.txt . Text.concat)
               True
@@ -183,20 +183,15 @@ appChooseCursor _ = Data.Maybe.listToMaybe
 
 runCommand ::
   Brick.BChan.BChan Event ->
-  Shell ->
+  Async.Async Shell ->
   Data.IORef.IORef Builder.Builder ->
   Text.Text ->
   IO ()
-runCommand chan shell ref cmd =
+runCommand chan setup ref cmd = do
   let stdin =
         Data.Text.Lazy.fromStrict cmd
           & Data.Text.Lazy.Encoding.encodeUtf8
           & Process.byteStringInput
-      config =
-        Process.proc (shellToString shell) []
-          & Process.setStdin stdin
-          & Process.setStdout Process.createPipe
-          & Process.setStderr Process.createPipe
       writeLine line = do
         Data.IORef.atomicModifyIORef ref (\acc -> (acc <> line <> "\n", ()))
         _ <- Brick.BChan.writeBChanNonBlocking chan ProcessProducedNewOutput
@@ -212,6 +207,12 @@ runCommand chan shell ref cmd =
             writeLine (Builder.fromText str)
             fromHandleToRef handle
    in do
+        shell <- Async.wait setup
+        let config =
+              Process.proc (shellToString shell) []
+                & Process.setStdin stdin
+                & Process.setStdout Process.createPipe
+                & Process.setStderr Process.createPipe
         Process.withProcessWait config $ \proc -> do
           Async.concurrently_
             (fromHandleToRef (Process.getStdout proc))
@@ -222,8 +223,9 @@ runCommand chan shell ref cmd =
             System.Exit.ExitFailure code ->
               writeLine ("\n[failed with code: " <> Builder.fromString (show code) <> "]")
 
-setupFakeBinaries :: IO ()
-setupFakeBinaries = do
+setupForRunningCommands :: IO Shell
+setupForRunningCommands = do
+  -- Create directory for fake binaries to replace destructive commands.
   fakeBinariesDir <- Directory.getXdgDirectory Directory.XdgCache "shy"
   Directory.createDirectoryIfMissing True fakeBinariesDir
   self <- System.Environment.getExecutablePath
@@ -237,8 +239,13 @@ setupFakeBinaries = do
             else Control.Exception.throwIO err
       )
     Directory.createFileLink self path
+
+  -- Add the directory with fake commands to the PATH.
   path <- System.Environment.getEnv "PATH"
   System.Environment.setEnv "PATH" (fakeBinariesDir <> ":" <> path)
+
+  -- Detect the shell we're in, so shy can run the same one.
+  fmap (Data.Maybe.fromMaybe Bash) detectShell
 
 data Shell = Bash | Fish | Zsh
 

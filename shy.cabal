@@ -1,0 +1,64 @@
+cabal-version: 1.18
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           shy
+version:        0.1.0.0
+synopsis:       safely try out shell one-liners with live feedback
+description:    Please see the README at <https://github.com/jwoudenberg/shy>.
+homepage:       https://github.com/jwoudenberg/shy#readme
+bug-reports:    https://github.com/jwoudenberg/shy/issues
+author:         Jasper Woudenberg
+maintainer:     mail@jasperwoudenberg.com
+copyright:      2021 Jasper Woudenberg
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-doc-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/jwoudenberg/shy
+
+library
+  exposed-modules:
+      Shy
+  other-modules:
+      Paths_shy
+  hs-source-dirs:
+      src
+  default-extensions:
+      DeriveGeneric
+      GeneralizedNewtypeDeriving
+      NamedFieldPuns
+      NumericUnderscores
+      OverloadedStrings
+      ScopedTypeVariables
+      StrictData
+  ghc-options: -Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wpartial-fields -Wredundant-constraints -Wincomplete-uni-patterns
+  build-depends:
+      base >=4.10.1.0 && <5
+  default-language: Haskell2010
+
+executable shy
+  main-is: Main.hs
+  other-modules:
+      Paths_shy
+  hs-source-dirs:
+      app
+  default-extensions:
+      DeriveGeneric
+      GeneralizedNewtypeDeriving
+      NamedFieldPuns
+      NumericUnderscores
+      OverloadedStrings
+      ScopedTypeVariables
+      StrictData
+  ghc-options: -Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wpartial-fields -Wredundant-constraints -Wincomplete-uni-patterns -threaded -rtsopts "-with-rtsopts=-N -T" -O2
+  build-depends:
+      base >=4.10.1.0 && <5
+    , shy
+  default-language: Haskell2010

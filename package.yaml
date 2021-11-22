@@ -25,6 +25,7 @@ executables:
     - -rtsopts "-with-rtsopts=-N -T"
     - -O2
 dependencies:
+- async >= 2.2 && < 2.3
 - base >= 4.10.1.0 && < 5
 - brick >= 0.62 && < 0.66
 - text >= 1.2.4.0 && < 1.3

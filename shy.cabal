@@ -40,7 +40,8 @@ library
       StrictData
   ghc-options: -Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wpartial-fields -Wredundant-constraints -Wincomplete-uni-patterns
   build-depends:
-      base >=4.10.1.0 && <5
+      async ==2.2.*
+    , base >=4.10.1.0 && <5
     , brick >=0.62 && <0.66
     , text >=1.2.4.0 && <1.3
     , typed-process >=0.2.7.0 && <0.3
@@ -63,7 +64,8 @@ executable shy
       StrictData
   ghc-options: -Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wpartial-fields -Wredundant-constraints -Wincomplete-uni-patterns -threaded -rtsopts "-with-rtsopts=-N -T" -O2
   build-depends:
-      base >=4.10.1.0 && <5
+      async ==2.2.*
+    , base >=4.10.1.0 && <5
     , brick >=0.62 && <0.66
     , shy
     , text >=1.2.4.0 && <1.3

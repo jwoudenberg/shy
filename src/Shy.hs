@@ -25,6 +25,7 @@ import qualified System.Environment
 import qualified System.Exit
 import System.FilePath ((</>))
 import qualified System.IO.Error
+import qualified System.Posix.Process
 import qualified System.Posix.Types
 import qualified System.Process.Typed as Process
 
@@ -75,7 +76,8 @@ run = do
   setupFakeBinaries dir
   initialVty <- mkVty
   chan <- Brick.BChan.newBChan 1
-  endState <- Brick.customMain initialVty mkVty (Just chan) app (initialState chan dir)
+  shell <- Data.Maybe.fromMaybe Bash <$> detectShell
+  endState <- Brick.customMain initialVty mkVty (Just chan) app (initialState chan dir shell)
   let finalCmd = Text.concat (Edit.getEditContents (editor endState))
   liftIO $ Data.Text.IO.putStrLn finalCmd
 
@@ -84,6 +86,7 @@ data State = State
     cmdProcess :: Maybe (Async.Async (), Data.IORef.IORef Builder.Builder),
     eventChannel :: Brick.BChan.BChan Event,
     extraPathDir :: FilePath,
+    shellToUse :: Shell,
     output :: Text.Text
   }
 
@@ -106,13 +109,14 @@ app =
       Brick.appChooseCursor
     }
 
-initialState :: Brick.BChan.BChan Event -> FilePath -> State
-initialState eventChannel extraPathDir =
+initialState :: Brick.BChan.BChan Event -> FilePath -> Shell -> State
+initialState eventChannel extraPathDir shellToUse =
   State
     { editor = Edit.editor Editor (Just 1) "",
       cmdProcess = Nothing,
       eventChannel,
       extraPathDir,
+      shellToUse,
       output = ""
     }
 
@@ -138,6 +142,7 @@ appHandleEvent state event =
               runCommand
                 (eventChannel state)
                 (extraPathDir state)
+                (shellToUse state)
                 newRef
                 (Text.concat (Edit.getEditContents newEditor))
           Brick.continue
@@ -164,7 +169,8 @@ appDraw :: State -> [Brick.Widget Name]
 appDraw state =
   [ Brick.vBox
       [ Brick.hBox
-          [ Brick.txt "> ",
+          [ Brick.str (shellToString (shellToUse state)),
+            Brick.txt "> ",
             Edit.renderEditor
               (Brick.txt . Text.concat)
               True
@@ -180,16 +186,17 @@ appChooseCursor _ = Data.Maybe.listToMaybe
 runCommand ::
   Brick.BChan.BChan Event ->
   FilePath ->
+  Shell ->
   Data.IORef.IORef Builder.Builder ->
   Text.Text ->
   IO ()
-runCommand chan extraPathDir ref cmd =
+runCommand chan extraPathDir shell ref cmd =
   let stdin =
         Process.byteStringInput . Data.Text.Lazy.Encoding.encodeUtf8 $
           "export PATH=" <> Data.Text.Lazy.pack extraPathDir <> ":$PATH;"
             <> Data.Text.Lazy.fromStrict cmd
       config =
-        Process.proc "bash" []
+        Process.proc (shellToString shell) []
           & Process.setStdin stdin
           & Process.setStdout Process.createPipe
           & Process.setStderr Process.createPipe
@@ -234,3 +241,29 @@ setupFakeBinaries dir = do
 
 fakeBinariesDir :: IO FilePath
 fakeBinariesDir = Directory.getXdgDirectory Directory.XdgCache "shy"
+
+data Shell = Bash | Fish | Zsh
+
+shellToString :: Shell -> String
+shellToString Bash = "bash"
+shellToString Fish = "fish"
+shellToString Zsh = "zsh"
+
+detectShell :: IO (Maybe Shell)
+detectShell = do
+  parentId <- System.Posix.Process.getParentProcessID
+  (exitCode, stdout) <-
+    Process.proc "ps" ["-p", show parentId, "-o", "comm="]
+      & Process.readProcessStdout
+  let processName =
+        Data.Text.Lazy.Encoding.decodeUtf8' stdout
+          & either (\_ -> "") id
+          & Data.Text.Lazy.strip
+
+  pure $
+    case (exitCode, processName) of
+      (System.Exit.ExitFailure _, _) -> Nothing
+      (System.Exit.ExitSuccess, "bash") -> Just Bash
+      (System.Exit.ExitSuccess, "fish") -> Just Fish
+      (System.Exit.ExitSuccess, "zsh") -> Just Zsh
+      (_, _) -> Nothing

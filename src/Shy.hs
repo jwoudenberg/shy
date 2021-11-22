@@ -32,7 +32,20 @@ main = do
   args <- System.Environment.getArgs
   if ownName `elem` fakeBinaries
     then runFakeBin (ownName : args)
-    else run
+    else case args of
+      [] -> run
+      ["--help"] -> showHelp
+      _ -> do
+        showHelp
+        System.Exit.exitFailure
+
+showHelp :: IO ()
+showHelp = do
+  putStrLn "Usage:"
+  putStrLn "  shy [options]"
+  putStrLn ""
+  putStrLn "OPTIONS"
+  putStrLn "  --help     show this help text"
 
 -- | Binaries we don't want to run in shy because they modify files on the file
 -- system.

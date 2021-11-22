@@ -33,7 +33,7 @@ stdError :: System.Posix.Types.Fd
 stdError = System.Posix.Types.Fd 2
 
 app :: Brick.App State Event Name
-app = (Brick.simpleApp (Brick.txt "")) {Brick.appDraw, Brick.appHandleEvent}
+app = (Brick.simpleApp Brick.emptyWidget) {Brick.appDraw, Brick.appHandleEvent}
 
 initialState :: State
 initialState =

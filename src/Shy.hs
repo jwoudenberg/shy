@@ -2,16 +2,20 @@ module Shy (main) where
 
 import qualified Brick
 import qualified Brick.Widgets.Edit as Edit
-import Data.Text (Text)
+import Control.Monad.IO.Class (liftIO)
+import qualified Data.Text as Text
+import qualified Data.Text.IO
 import qualified Data.Void as Void
+import qualified Graphics.Vty.Input.Events as VtyEvents
 
 main :: IO ()
 main = do
-  _ <- Brick.defaultMain app initialState
-  pure ()
+  endState <- Brick.defaultMain app initialState
+  let finalCmd = Text.intercalate "\n" (Edit.getEditContents (editor endState))
+  liftIO $ Data.Text.IO.putStrLn finalCmd
 
 data State = State
-  { editor :: Edit.Editor Text Name
+  { editor :: Edit.Editor Text.Text Name
   }
 
 type Event = Void.Void
@@ -31,9 +35,14 @@ initialState =
 appHandleEvent :: State -> Brick.BrickEvent Name Event -> Brick.EventM Name (Brick.Next State)
 appHandleEvent state event =
   case event of
-    Brick.VtyEvent vtyEvent -> do
-      newEditor <- Edit.handleEditorEvent vtyEvent (editor state)
-      Brick.continue state {editor = newEditor}
+    Brick.VtyEvent vtyEvent ->
+      case vtyEvent of
+        VtyEvents.EvKey VtyEvents.KEsc [] -> Brick.halt state
+        VtyEvents.EvKey (VtyEvents.KChar 'c') [VtyEvents.MCtrl] -> Brick.halt state
+        VtyEvents.EvKey VtyEvents.KEnter [] -> Brick.halt state
+        _ -> do
+          newEditor <- Edit.handleEditorEvent vtyEvent (editor state)
+          Brick.continue state {editor = newEditor}
     Brick.AppEvent appEvent -> Void.absurd appEvent
     Brick.MouseDown _ _ _ _ -> Brick.continue state
     Brick.MouseUp _ _ _ -> Brick.continue state
@@ -41,11 +50,7 @@ appHandleEvent state event =
 appDraw :: State -> [Brick.Widget Name]
 appDraw state =
   [ Edit.renderEditor
-      ( \editorLines ->
-          case editorLines of
-            [] -> Brick.txt ""
-            line : _ -> Brick.txt line
-      )
+      (Brick.txt . Text.intercalate "\n")
       True
       (editor state)
   ]

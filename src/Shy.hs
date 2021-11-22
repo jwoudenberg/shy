@@ -67,14 +67,16 @@ appHandleEvent state event =
 
 appDraw :: State -> [Brick.Widget Name]
 appDraw state =
-  [ Brick.hBox
-      [ Brick.txt "> ",
-        Edit.renderEditor
-          (Brick.txt . Text.concat)
-          True
-          (editor state)
-      ],
-    Brick.txtWrap (output state)
+  [ Brick.vBox
+      [ Brick.hBox
+          [ Brick.txt "> ",
+            Edit.renderEditor
+              (Brick.txt . Text.concat)
+              True
+              (editor state)
+          ],
+        Brick.txtWrap (output state)
+      ]
   ]
 
 appChooseCursor :: State -> [Brick.CursorLocation Name] -> Maybe (Brick.CursorLocation Name)

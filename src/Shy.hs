@@ -11,6 +11,7 @@ import Data.Function ((&))
 import qualified Data.IORef
 import qualified Data.List
 import qualified Data.Maybe
+import qualified Data.String.AnsiEscapeCodes.Strip.Text
 import qualified Data.Text as Text
 import qualified Data.Text.IO
 import qualified Data.Text.Lazy
@@ -161,6 +162,7 @@ appHandleEvent state event =
           { output =
               Builder.toLazyText newOutput
                 & Data.Text.Lazy.toStrict
+                & Data.String.AnsiEscapeCodes.Strip.Text.stripAnsiEscapeCodes
           }
     Brick.MouseDown _ _ _ _ -> Brick.continue state
     Brick.MouseUp _ _ _ -> Brick.continue state
@@ -176,7 +178,7 @@ appDraw state =
               True
               (editor state)
           ],
-        Brick.txtWrap (output state)
+        Brick.txt (output state)
       ]
   ]
 

@@ -89,9 +89,9 @@ runCommand cmd = do
       & Process.setStdin (Process.byteStringInput (Data.Text.Lazy.Encoding.encodeUtf8 (Data.Text.Lazy.fromStrict cmd)))
       & Process.readProcessInterleaved
   let textOutput =
-        Data.Text.Lazy.Encoding.decodeUtf8' output
-          & either (\_ -> "") id
-          & Data.Text.Lazy.toStrict
+        case Data.Text.Lazy.Encoding.decodeUtf8' output of
+          Left _ -> "[non-utf8 content]"
+          Right txt -> Data.Text.Lazy.toStrict txt
   case exitCode of
     System.Exit.ExitSuccess -> pure textOutput
     System.Exit.ExitFailure code -> pure (textOutput <> "\n[failed with code: " <> Text.pack (show code) <> "]")

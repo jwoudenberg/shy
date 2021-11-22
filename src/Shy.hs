@@ -16,8 +16,10 @@ import qualified Data.Text.IO
 import qualified Data.Text.Lazy
 import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Lazy.Encoding
+import qualified Data.Version
 import qualified Graphics.Vty as Vty
 import qualified Graphics.Vty.Input.Events as VtyEvents
+import qualified Paths_shy
 import qualified System.Directory as Directory
 import qualified System.Environment
 import qualified System.Exit
@@ -35,6 +37,7 @@ main = do
     else case args of
       [] -> run
       ["--help"] -> showHelp
+      ["--version"] -> showVersion
       _ -> do
         showHelp
         System.Exit.exitFailure
@@ -45,7 +48,15 @@ showHelp = do
   putStrLn "  shy [options]"
   putStrLn ""
   putStrLn "OPTIONS"
-  putStrLn "  --help     show this help text"
+  putStrLn "  --help       show this help text"
+  putStrLn "  --version    show version of shy"
+
+showVersion :: IO ()
+showVersion =
+  Data.Version.versionBranch Paths_shy.version
+    & fmap show
+    & Data.List.intercalate "."
+    & putStrLn
 
 -- | Binaries we don't want to run in shy because they modify files on the file
 -- system.

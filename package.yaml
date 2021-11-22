@@ -26,6 +26,8 @@ executables:
     - -O2
 dependencies:
 - base >= 4.10.1.0 && < 5
+- brick >= 0.62 && < 0.66
+- text >= 1.2.4.0 && < 1.3
 ghc-options:
 - -Wall
 - -Werror

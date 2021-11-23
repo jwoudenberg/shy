@@ -1,6 +1,6 @@
 name: shy
 version: 0.1.0.0
-synopsis: safely try out shell one-liners with live feedback
+synopsis: Safely build shell one-liners with live feedback
 description: Please see the README at <https://github.com/jwoudenberg/shy>.
 author: Jasper Woudenberg
 maintainer: mail@jasperwoudenberg.com

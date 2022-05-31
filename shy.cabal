@@ -1,12 +1,12 @@
 cabal-version: 1.18
 
--- This file has been generated from package.yaml by hpack version 0.34.5.
+-- This file has been generated from package.yaml by hpack version 0.34.7.
 --
 -- see: https://github.com/sol/hpack
 
 name:           shy
 version:        0.1.0.0
-synopsis:       safely try out shell one-liners with live feedback
+synopsis:       Safely build shell one-liners with live feedback
 description:    Please see the README at <https://github.com/jwoudenberg/shy>.
 homepage:       https://github.com/jwoudenberg/shy#readme
 bug-reports:    https://github.com/jwoudenberg/shy/issues
@@ -42,7 +42,7 @@ library
   build-depends:
       async ==2.2.*
     , base >=4.10.1.0 && <5
-    , brick >=0.62 && <0.66
+    , brick >=0.62 && <1
     , directory >=1.3.6.0 && <1.4
     , filepath ==1.4.*
     , strip-ansi-escape ==0.1.*
@@ -70,7 +70,7 @@ executable shy
   build-depends:
       async ==2.2.*
     , base >=4.10.1.0 && <5
-    , brick >=0.62 && <0.66
+    , brick >=0.62 && <1
     , directory >=1.3.6.0 && <1.4
     , filepath ==1.4.*
     , shy
